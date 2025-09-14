@@ -16,36 +16,41 @@ RSS_FEEDS = {
 }
 
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
 
-seen_entries = set()
+class ModPubBot(discord.Client):
+    def __init__(self):
+        super().__init__(intents=intents)
+        self.seen_entries = set()
 
-async def fetch_and_post():
-    await client.wait_until_ready()
-    channel = client.get_channel(CHANNEL_ID)
+    async def setup_hook(self):
+        # Start background task after client is ready
+        self.bg_task = asyncio.create_task(self.fetch_and_post())
 
-    while not client.is_closed():
-        for game, url in RSS_FEEDS.items():
-            feed = feedparser.parse(url)
-            for entry in feed.entries:
-                if entry.link not in seen_entries:
-                    seen_entries.add(entry.link)
+    async def fetch_and_post(self):
+        await self.wait_until_ready()
+        channel = self.get_channel(CHANNEL_ID)
 
-                    embed = discord.Embed(
-                        title=entry.title,
-                        url=entry.link,
-                        description=entry.get("summary", "New mod published!"),
-                        color=0x2ecc71
-                    )
-                    embed.set_author(name=game)
-                    embed.set_footer(text="Source: mod.pub")
+        while not self.is_closed():
+            for game, url in RSS_FEEDS.items():
+                feed = feedparser.parse(url)
+                for entry in feed.entries:
+                    if entry.link not in self.seen_entries:
+                        self.seen_entries.add(entry.link)
 
-                    await channel.send(embed=embed)
-        await asyncio.sleep(CHECK_INTERVAL)
+                        embed = discord.Embed(
+                            title=entry.title,
+                            url=entry.link,
+                            description=entry.get("summary", "New mod published!"),
+                            color=0x2ecc71
+                        )
+                        embed.set_author(name=game)
+                        embed.set_footer(text="Source: mod.pub")
 
-@client.event
-async def on_ready():
-    print(f"✅ Logged in as {client.user}")
+                        await channel.send(embed=embed)
+            await asyncio.sleep(CHECK_INTERVAL)
 
-client.loop.create_task(fetch_and_post())
+    async def on_ready(self):
+        print(f"✅ Logged in as {self.user}")
+
+client = ModPubBot()
 client.run(TOKEN)
