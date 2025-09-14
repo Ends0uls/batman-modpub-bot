@@ -2,17 +2,18 @@ import os
 import discord
 import feedparser
 import asyncio
+from datetime import datetime
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))  # where bot posts updates
-CHECK_INTERVAL = 300  # seconds (5 min)
+CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))  # channel where bot posts
+CHECK_INTERVAL = 120  # seconds (2 min)
 
 # RSS feeds for Batman games
 RSS_FEEDS = {
-    "Arkham Knight": "https://mod.pub/batman-arkham-knight/rss",
-    "Arkham Asylum": "https://mod.pub/batman-arkham-asylum-game-of-the-year-edition/rss",
-    "Arkham Origins": "https://mod.pub/batman-arkham-origins/rss",
-    "Arkham City": "https://mod.pub/batman-arkham-city-game-of-the-year-edition/rss",
+    "Batman: Arkham Knight": "https://mod.pub/batman-arkham-knight/rss",
+    "Batman: Arkham Asylum GOTY": "https://mod.pub/batman-arkham-asylum-game-of-the-year-edition/rss",
+    "Batman: Arkham Origins": "https://mod.pub/batman-arkham-origins/rss",
+    "Batman: Arkham City GOTY": "https://mod.pub/batman-arkham-city-game-of-the-year-edition/rss",
 }
 
 intents = discord.Intents.default()
@@ -23,7 +24,6 @@ class ModPubBot(discord.Client):
         self.seen_entries = set()
 
     async def setup_hook(self):
-        # Start background task after client is ready
         self.bg_task = asyncio.create_task(self.fetch_and_post())
 
     async def fetch_and_post(self):
@@ -31,22 +31,32 @@ class ModPubBot(discord.Client):
         channel = self.get_channel(CHANNEL_ID)
 
         while not self.is_closed():
+            print("🔄 Checking mod.pub feeds...")
             for game, url in RSS_FEEDS.items():
                 feed = feedparser.parse(url)
                 for entry in feed.entries:
                     if entry.link not in self.seen_entries:
                         self.seen_entries.add(entry.link)
 
+                        # Build a Nexus Mods–style embed
                         embed = discord.Embed(
                             title=entry.title,
                             url=entry.link,
-                            description=entry.get("summary", "New mod published!"),
-                            color=0x2ecc71
+                            description=entry.get("summary", "New mod released!"),
+                            color=0x3498db,
+                            timestamp=datetime.utcnow()
                         )
-                        embed.set_author(name=game)
+                        embed.set_author(name=game, icon_url="https://mod.pub/static/img/favicon.png")
                         embed.set_footer(text="Source: mod.pub")
 
+                        # Try to include image/thumbnail if available
+                        if "media_thumbnail" in entry and entry.media_thumbnail:
+                            embed.set_thumbnail(url=entry.media_thumbnail[0]["url"])
+                        elif "media_content" in entry and entry.media_content:
+                            embed.set_thumbnail(url=entry.media_content[0]["url"])
+
                         await channel.send(embed=embed)
+                        print(f"✅ Posted new mod: {entry.title} ({game})")
             await asyncio.sleep(CHECK_INTERVAL)
 
     async def on_ready(self):
